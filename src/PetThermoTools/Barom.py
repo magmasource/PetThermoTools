@@ -188,7 +188,7 @@ def find_mineral_cosaturation(cores = None, Model = None, bulk = None, phases = 
                     Group = np.array([B])
 
                 if One == 1:
-                    Results = satTemperature(None, 0,
+                    Res = satTemperature(None, 0,
                                     Model = Model,
                                     comp = comp,
                                     T_initial_C = T_initial_C,
@@ -199,6 +199,10 @@ def find_mineral_cosaturation(cores = None, Model = None, bulk = None, phases = 
                                     H2O_Liq = H2O_Liq,
                                     fO2_buffer = fO2_buffer,
                                     fO2_offset = fO2_offset)
+
+                    for l in Results:
+                        if l != 'sat_surface':
+                            Results[l][i,j,0] = Res[l]
 
                 else:
                     # initialise queue
@@ -289,9 +293,9 @@ def find_mineral_cosaturation(cores = None, Model = None, bulk = None, phases = 
                                     Results[l][i,j,index] = Res[l]
 
         # covert any empty values to nan
-        #for l in Results:
-        #    if l != 'sat_surface':
-        #        Results[l][np.where(Results[l] == 0.0)] = np.nan
+        for l in Results:
+            if l != 'sat_surface':
+                Results[l][np.where(Results[l] == 0.0)] = np.nan
 
         if find_min is not None:
             if H2O_Liq is not None:
