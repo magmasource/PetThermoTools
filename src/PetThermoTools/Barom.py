@@ -86,7 +86,7 @@ def find_mineral_cosaturation(cores = None, Model = None, bulk = None, phases = 
         Warning('alphaMELTS for Python files are not on the python path. \n Please add these files to the path running \n import sys \n sys.path.append(r"insert_your_path_to_melts_here") \n You are looking for the location of the meltsdynamic.py file')
 
     T_step_C = dt_C
-    dt_C = T_maxdrop_C 
+    dt_C = T_maxdrop_C
 
     comp = bulk.copy()
     if H2O_Sat is True:
@@ -170,10 +170,15 @@ def find_mineral_cosaturation(cores = None, Model = None, bulk = None, phases = 
                 if Fe3Fet_Liq is not None:
                     comp['Fe3Fet_Liq'] = Fe3Fet_Liq[j]
 
+                One = 0
                 # determine how many processes to run in parallel
                 if len(P_bar) > 1:
                     A = len(P_bar)//cores
                     B = len(P_bar) % cores
+                else: # just one calculation
+                    One = 1
+                    A = 1
+                    B = 0
 
                 if A > 0:
                     Group = np.zeros(A) + cores
@@ -182,98 +187,111 @@ def find_mineral_cosaturation(cores = None, Model = None, bulk = None, phases = 
                 else:
                     Group = np.array([B])
 
-                # initialise queue
-                qs = []
-                q = Queue()
+                if One == 1:
+                    Results = satTemperature(None, 0,
+                                    Model = Model,
+                                    comp = comp,
+                                    T_initial_C = T_initial_C,
+                                    T_step_C = T_step_C,
+                                    dt_C = dt_C,
+                                    P_bar = P_bar[0],
+                                    phases = phases,
+                                    H2O_Liq = H2O_Liq,
+                                    fO2_buffer = fO2_buffer,
+                                    fO2_offset = fO2_offset)
 
+                else:
+                    # initialise queue
+                    qs = []
+                    q = Queue()
 
-                # run calculations
-                for k in range(len(Group)):
-                    ps = []
+                    # run calculations
+                    for k in range(len(Group)):
+                        ps = []
 
-                    for kk in range(int(cores*k), int(cores*k + Group[k])):
-                        p = Process(target = satTemperature, args = (q, kk),
-                                    kwargs = {'Model': Model, 'comp': comp,
-                                    'T_initial_C': T_initial_C, 'T_step_C': T_step_C,
-                                    'dt_C': dt_C, 'P_bar': P_bar[kk], 'phases': phases,
-                                    'H2O_Liq': H2O_Liq, 'fO2_buffer': fO2_buffer, 'fO2_offset': fO2_offset})
+                        for kk in range(int(cores*k), int(cores*k + Group[k])):
+                            p = Process(target = satTemperature, args = (q, kk),
+                                        kwargs = {'Model': Model, 'comp': comp,
+                                        'T_initial_C': T_initial_C, 'T_step_C': T_step_C,
+                                        'dt_C': dt_C, 'P_bar': P_bar[kk], 'phases': phases,
+                                        'H2O_Liq': H2O_Liq, 'fO2_buffer': fO2_buffer, 'fO2_offset': fO2_offset})
 
-                        ps.append(p)
-                        p.start()
+                            ps.append(p)
+                            p.start()
 
-                    TIMEOUT = 300
+                        TIMEOUT = 300
 
-                    start = time.time()
-                    for p in ps:
-                        if time.time() - start < TIMEOUT - 10:
-                            try:
-                                ret = q.get(timeout = TIMEOUT - (time.time()-start) + 10)
-                            except:
-                                ret = []
-                        else:
-                            try:
-                                ret = q.get(timeout = 10)
-                            except:
-                                ret = []
-
-                        qs.append(ret)
-
-                    TIMEOUT = 5
-                    start = time.time()
-                    for p in ps:
-                        if p.is_alive():
-                            while time.time() - start <= TIMEOUT:
-                                if not p.is_alive():
-                                    p.join()
-                                    p.terminate()
-                                    break
-                                time.sleep(.1)
+                        start = time.time()
+                        for p in ps:
+                            if time.time() - start < TIMEOUT - 10:
+                                try:
+                                    ret = q.get(timeout = TIMEOUT - (time.time()-start) + 10)
+                                except:
+                                    ret = []
                             else:
+                                try:
+                                    ret = q.get(timeout = 10)
+                                except:
+                                    ret = []
+
+                            qs.append(ret)
+
+                        TIMEOUT = 5
+                        start = time.time()
+                        for p in ps:
+                            if p.is_alive():
+                                while time.time() - start <= TIMEOUT:
+                                    if not p.is_alive():
+                                        p.join()
+                                        p.terminate()
+                                        break
+                                    time.sleep(.1)
+                                else:
+                                    p.terminate()
+                                    p.join(5)
+                            else:
+                                p.join()
                                 p.terminate()
-                                p.join(5)
-                        else:
-                            p.join()
-                            p.terminate()
 
 
-                    # for p in ps:
-                    #     try:
-                    #         ret = q.get(timeout = 180)
-                    #     except:
-                    #         ret = []
-                    #
-                    #     qs.append(ret)
-                    #
-                    # TIMEOUT = 20
-                    # start = time.time()
-                    # for p in ps:
-                    #     if p.is_alive():
-                    #         time.sleep(.1)
-                    #         while time.time() - start <= TIMEOUT:
-                    #             if not p.is_alive():
-                    #                 p.join()
-                    #                 p.terminate()
-                    #                 break
-                    #             time.sleep(.1)
-                    #         else:
-                    #             p.terminate()
-                    #             p.join(5)
-                    #     else:
-                    #         p.join()
-                    #         p.terminate()
+                        # for p in ps:
+                        #     try:
+                        #         ret = q.get(timeout = 180)
+                        #     except:
+                        #         ret = []
+                        #
+                        #     qs.append(ret)
+                        #
+                        # TIMEOUT = 20
+                        # start = time.time()
+                        # for p in ps:
+                        #     if p.is_alive():
+                        #         time.sleep(.1)
+                        #         while time.time() - start <= TIMEOUT:
+                        #             if not p.is_alive():
+                        #                 p.join()
+                        #                 p.terminate()
+                        #                 break
+                        #             time.sleep(.1)
+                        #         else:
+                        #             p.terminate()
+                        #             p.join(5)
+                        #     else:
+                        #         p.join()
+                        #         p.terminate()
 
-                # # extract results
-                for kk in range(len(qs)):
-                    if len(qs[kk]) > 0:
-                        Res, index = qs[kk]
-                        for l in Results:
-                            if l != 'sat_surface':
-                                Results[l][i,j,index] = Res[l]
+                    # # extract results
+                    for kk in range(len(qs)):
+                        if len(qs[kk]) > 0:
+                            Res, index = qs[kk]
+                            for l in Results:
+                                if l != 'sat_surface':
+                                    Results[l][i,j,index] = Res[l]
 
         # covert any empty values to nan
-        for l in Results:
-            if l != 'sat_surface':
-                Results[l][np.where(Results[l] == 0.0)] = np.nan
+        #for l in Results:
+        #    if l != 'sat_surface':
+        #        Results[l][np.where(Results[l] == 0.0)] = np.nan
 
         if find_min is not None:
             if H2O_Liq is not None:
@@ -290,7 +308,7 @@ def find_mineral_cosaturation(cores = None, Model = None, bulk = None, phases = 
                 Results['range'][np.where(Results[phases[0] + ' - ' + phases[1]] <= T_cut_C)] = True
                 Results['range'][np.where(Results[phases[0] + ' - ' + phases[1]] > T_cut_C)] = False
 
-    
+
 
     return Results
 
@@ -574,7 +592,10 @@ def satTemperature(q, index, *, Model = None, comp = None, phases = None, T_init
             if ~np.isnan(Results[phases[0]]) and ~np.isnan(Results[phases[1]]):
                 Results[phases[0] + ' - ' + phases[1]] = abs(Results[phases[0]] - Results[phases[1]])
 
-        q.put([Results, index])
+        if q is not None:
+            q.put([Results, index])
+        else:
+            return Results
         return
 
     if Model == "Holland":
@@ -614,7 +635,7 @@ def satTemperature(q, index, *, Model = None, comp = None, phases = None, T_init
             Results[phases[0] + ' - ' + phases[1]] = np.nan
             if ~np.isnan(Results[phases[0]]) and ~np.isnan(Results[phases[1]]):
                 Results[phases[0] + ' - ' + phases[1]] = abs(Results[phases[0]] - Results[phases[1]])
-        
+
         q.put([Results, index])
         #except:
         #    q.put([Results, index])

@@ -11,15 +11,8 @@ ipynb_checkpoints
 *.orig
 *.ini
 
-__pycache__/
-.ipynb_checkpoints/
-*.egg-info/
-ipynb_checkpoints
-/.ipynb_checkpoints/
-/.ipynb_checkpoints/
-/.coverage
-/docs/_build/
-~$*
-/build/
-*.orig
-*.ini
+.DS_Store
+.pdm-python
+.python-version
+dist/
+pdm.lock
